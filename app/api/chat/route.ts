@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { streamText } from "ai"
+import { createOpenAI } from "@ai-sdk/openai"
 
 export const maxDuration = 30
 
@@ -66,8 +67,13 @@ Instrucciones:
 
 Recuerda: Eres el asistente oficial de la Universidad de Medellín y tu propósito es facilitar la experiencia universitaria.`
 
+    const deepseek = createOpenAI({
+      baseURL: "https://api.deepseek.com",
+      apiKey: process.env.DEEPSEEK_API_KEY || "",
+    })
+
     const result = streamText({
-      model: "openai/gpt-4o-mini",
+      model: deepseek("deepseek-chat"),
       messages: [
         {
           role: "system",
@@ -76,7 +82,6 @@ Recuerda: Eres el asistente oficial de la Universidad de Medellín y tu propósi
         ...messages,
       ],
       temperature: 0.7,
-      maxTokens: 500,
     })
 
     // Save messages to database
