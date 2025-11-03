@@ -9,7 +9,7 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
-  created_at?: string
+  created_at: string
 }
 
 interface ChatMessagesProps {
@@ -25,12 +25,7 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
     }
   }, [messages])
 
-  const formatTime = (dateString?: string) => {
-    if (!dateString) {
-      const date = new Date();
-      return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-    }
-
+  const formatTime = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
   }

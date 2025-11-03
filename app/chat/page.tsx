@@ -136,45 +136,21 @@ export default function ChatPage() {
 
       setMessages((prev) => [...prev, assistantMessage])
 
-      let buffer = ""
-
       while (true) {
         const { done, value } = await reader!.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        
-        buffer = lines.pop() || ""
+        const chunk = decoder.decode(value)
+        assistantContent += chunk
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6)
-            
-            if (data === "[DONE]") {
-              break
-            }
-
-            try {
-              const parsed = JSON.parse(data)
-              
-              if (parsed.type === "text-delta" && parsed.delta) {
-                assistantContent += parsed.delta
-                
-                setMessages((prev) => {
-                  const newMessages = [...prev]
-                  newMessages[newMessages.length - 1] = {
-                    ...assistantMessage,
-                    content: assistantContent,
-                  }
-                  return newMessages
-                })
-              }
-            } catch (e) {
-              console.warn("[v0] Failed to parse SSE data:", data)
-            }
+        setMessages((prev) => {
+          const newMessages = [...prev]
+          newMessages[newMessages.length - 1] = {
+            ...assistantMessage,
+            content: assistantContent,
           }
-        }
+          return newMessages
+        })
       }
 
       if (currentConversationId) {
