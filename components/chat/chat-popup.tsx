@@ -62,6 +62,8 @@ export function ChatPopup() {
         }),
       })
 
+      console.log(response.body)
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || "Error en la respuesta del servidor")
