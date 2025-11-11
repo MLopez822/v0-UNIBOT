@@ -41,69 +41,83 @@ export function ChatPopup() {
   }, [])
 
   const handleSend = async () => {
-    if (!message.trim() || isLoading) return
+  if (!message.trim() || isLoading) return
 
-    if (!isAuthenticated) {
-      alert("Por favor inicia sesión para usar el chatbot")
-      return
-    }
-
-    const userMessage = message
-    setMessage("")
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }])
-    setIsLoading(true)
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, { role: "user", content: userMessage }],
-        }),
-      })
-
-      console.log(response.body)
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Error en la respuesta del servidor")
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let assistantMessage = ""
-
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }])
-
-      while (true) {
-        const { done, value } = await reader!.read()
-        if (done) break
-      
-        const chunk = decoder.decode(value, { stream: true })
-        assistantMessage += chunk
-      
-        setMessages((prev) => {
-          const newMessages = [...prev]
-          newMessages[newMessages.length - 1] = {
-            role: "assistant",
-            content: assistantMessage,
-          }
-          return newMessages
-        })
-      }
-    } catch (error: any) {
-      console.error("[UniBot] Chat error:", error)
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que el backend esté configurado correctamente.`,
-        },
-      ])
-    } finally {
-      setIsLoading(false)
-    }
+  if (!isAuthenticated) {
+    alert("Por favor inicia sesión para usar el chatbot")
+    return
   }
+
+  const userMessage = message
+  setMessage("")
+  setMessages((prev) => [...prev, { role: "user", content: userMessage }])
+  setIsLoading(true)
+
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [...messages, { role: "user", content: userMessage }],
+      }),
+    })
+
+    console.log(response.body)
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || "Error en la respuesta del servidor")
+    }
+
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let assistantMessage = ""
+
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }])
+
+    while (true) {
+      const { done, value } = await reader!.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || ""
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue
+        const data = line.replace("data: ", "").trim()
+        if (data === "[DONE]") break
+
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.type === "text-delta" && parsed.delta) {
+            assistantMessage += parsed.delta
+            setMessages((prev) => {
+              const newMessages = [...prev]
+              newMessages[newMessages.length - 1] = {
+                role: "assistant",
+                content: assistantMessage,
+              }
+              return newMessages
+            })
+          }
+        } catch {}
+      }
+    }
+  } catch (error: any) {
+    console.error("[UniBot] Chat error:", error)
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que el backend esté configurado correctamente.`,
+      },
+    ])
+  } finally {
+    setIsLoading(false)
+  }
+}
 
   const handleExpand = () => {
     if (!isAuthenticated) {
