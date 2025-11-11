@@ -64,7 +64,7 @@ export function ChatPopup() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Error en la respuesta")
+        throw new Error(errorData.error || "Error en la respuesta del servidor")
       }
 
       const reader = response.body?.getReader()
@@ -77,22 +77,41 @@ export function ChatPopup() {
         const { done, value } = await reader!.read()
         if (done) break
 
-        const chunk = decoder.decode(value)
-        assistantMessage += chunk
+        const chunk = decoder.decode(value, { stream: true })
 
-        setMessages((prev) => {
-          const newMessages = [...prev]
-          newMessages[newMessages.length - 1] = { role: "assistant", content: assistantMessage }
-          return newMessages
-        })
+        const lines = chunk
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.startsWith("data: "))
+
+        for (const line of lines) {
+          const json = line.replace(/^data:\s*/, "")
+          if (json === "[DONE]") continue
+
+          try {
+            const parsed = JSON.parse(json)
+            const delta = parsed?.delta?.content || ""
+            assistantMessage += delta
+
+            setMessages((prev) => {
+              const newMessages = [...prev]
+              newMessages[newMessages.length - 1] = {
+                role: "assistant",
+                content: assistantMessage,
+              }
+              return newMessages
+            })
+          } catch {
+          }
+        }
       }
     } catch (error: any) {
-      console.error("[v0] Chat error:", error)
+      console.error("[UniBot] Chat error:", error)
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que las tablas de la base de datos estén creadas.`,
+          content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que el backend esté configurado correctamente.`,
         },
       ])
     } finally {
@@ -163,7 +182,7 @@ export function ChatPopup() {
               }`}
               style={msg.role === "user" ? { backgroundColor: "#1e3a5f" } : {}}
             >
-              <p className="text-sm leading-relaxed">{msg.content}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
             </div>
           </div>
         ))}
@@ -216,3 +235,5 @@ export function ChatPopup() {
     </Card>
   )
 }
+
+export default ChatPopup
