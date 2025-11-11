@@ -23,7 +23,6 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
-  created_at: string
 }
 
 export default function ChatPage() {
@@ -98,112 +97,86 @@ export default function ChatPage() {
   }
 
   const handleSendMessage = async (message: string) => {
-  if (!message.trim() || isLoading) return;
+    if (!message.trim() || isLoading) return
 
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    role: "user",
-    content: message,
-    created_at: new Date().toISOString(),
-  };
-
-  setMessages((prev) => [...prev, userMessage]);
-  setInput("");
-  setIsLoading(true);
-
-  try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })),
-        conversationId: currentConversationId,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Error en la respuesta");
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: message,
     }
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    let assistantContent = "";
+    setMessages((prev) => [...prev, userMessage])
+    setInput("")
+    setIsLoading(true)
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: "",
-      created_at: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, assistantMessage]);
-
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader!.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-
-      for (const line of lines) {
-        if (line.startsWith("data:")) {
-          const jsonStr = line.replace(/^data:\s*/, "");
-          if (jsonStr === "[DONE]") continue;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-
-            if (parsed.type === "text-delta" && parsed.delta) {
-              assistantContent += parsed.delta;
-
-              setMessages((prev) => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1] = {
-                  ...assistantMessage,
-                  content: assistantContent,
-                };
-                return newMessages;
-              });
-            }
-          } catch {
-            continue;
-          }
-        }
-      }
-
-      buffer = "";
-    }
-
-    if (currentConversationId) {
-      await fetch(`/api/conversations/${currentConversationId}/messages`, {
+    try {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          role: "assistant",
-          content: assistantContent,
+          messages: [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })),
+          conversationId: currentConversationId,
         }),
-      });
-    }
-  } catch (error: any) {
-    console.error("[v0] Error sending message:", error);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que las tablas de la base de datos estén creadas correctamente.`,
-        created_at: new Date().toISOString(),
-      },
-    ]);
-  } finally {
-    setIsLoading(false);
-  }
-};
+      })
 
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error en la respuesta")
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let assistantContent = ""
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "",
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+
+      while (true) {
+        const { done, value } = await reader!.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        assistantContent += chunk
+
+        setMessages((prev) => {
+          const newMessages = [...prev]
+          newMessages[newMessages.length - 1] = {
+            ...assistantMessage,
+            content: assistantContent,
+          }
+          return newMessages
+        })
+      }
+
+      if (currentConversationId) {
+        await fetch(`/api/conversations/${currentConversationId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: "assistant",
+            content: assistantContent,
+          }),
+        })
+      }
+    } catch (error: any) {
+      console.error("[v0] Error sending message:", error)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que las tablas de la base de datos estén creadas correctamente.`,
+        },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleEscalated = () => {
     alert("Tu caso ha sido escalado exitosamente. El equipo de soporte se pondrá en contacto contigo pronto.")
