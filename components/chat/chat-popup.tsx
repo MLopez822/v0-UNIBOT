@@ -78,34 +78,18 @@ export function ChatPopup() {
       while (true) {
         const { done, value } = await reader!.read()
         if (done) break
-
+      
         const chunk = decoder.decode(value, { stream: true })
-
-        const lines = chunk
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line.startsWith("data: "))
-
-        for (const line of lines) {
-          const json = line.replace(/^data:\s*/, "")
-          if (json === "[DONE]") continue
-
-          try {
-            const parsed = JSON.parse(json)
-            const delta = parsed?.delta?.content || ""
-            assistantMessage += delta
-
-            setMessages((prev) => {
-              const newMessages = [...prev]
-              newMessages[newMessages.length - 1] = {
-                role: "assistant",
-                content: assistantMessage,
-              }
-              return newMessages
-            })
-          } catch {
+        assistantMessage += chunk
+      
+        setMessages((prev) => {
+          const newMessages = [...prev]
+          newMessages[newMessages.length - 1] = {
+            role: "assistant",
+            content: assistantMessage,
           }
-        }
+          return newMessages
+        })
       }
     } catch (error: any) {
       console.error("[UniBot] Chat error:", error)
