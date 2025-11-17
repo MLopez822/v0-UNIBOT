@@ -19,15 +19,16 @@ interface ChatSidebarProps {
   currentConversationId?: string
   onSelectConversation: (id: string) => void
   onNewConversation: () => void
+  refreshTrigger?: number
 }
 
-export function ChatSidebar({ currentConversationId, onSelectConversation, onNewConversation }: ChatSidebarProps) {
+export function ChatSidebar({ currentConversationId, onSelectConversation, onNewConversation, refreshTrigger }: ChatSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     fetchConversations()
-  }, [])
+  }, [currentConversationId, refreshTrigger])
 
   const fetchConversations = async () => {
     try {
@@ -97,12 +98,14 @@ export function ChatSidebar({ currentConversationId, onSelectConversation, onNew
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{formatDate(conversation.created_at)}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {conversation.title || "Nueva conversación"}
+                    </p>
                     {conversation.is_escalated && (
                       <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Escalado</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">Conversación iniciada</p>
+                  <p className="text-xs text-gray-500">{formatDate(conversation.created_at)}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </button>

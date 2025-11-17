@@ -12,6 +12,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get conversations with their first message for display
     const { data: conversations, error } = await supabase
       .from("conversations")
       .select("*")

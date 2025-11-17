@@ -23,6 +23,7 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+  created_at: string
 }
 
 export default function ChatPage() {
@@ -33,6 +34,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [sidebarRefresh, setSidebarRefresh] = useState(0)
 
   useEffect(() => {
     const checkAuthAndLoad = async () => {
@@ -103,7 +105,10 @@ export default function ChatPage() {
       id: Date.now().toString(),
       role: "user",
       content: message,
+      created_at: new Date().toISOString(),
     }
+
+    const isFirstMessage = messages.length === 0
 
     setMessages((prev) => [...prev, userMessage])
     setInput("")
@@ -126,43 +131,74 @@ export default function ChatPage() {
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
-      let assistantContent = ""
+      let buffer = ""
+      let assistantMessageText = ""
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: "",
+        created_at: new Date().toISOString(),
       }
 
       setMessages((prev) => [...prev, assistantMessage])
 
       while (true) {
-        const { done, value } = await reader!.read()
-        if (done) break
+      const { done, value } = await reader!.read()
+      if (done) break
 
-        const chunk = decoder.decode(value)
-        assistantContent += chunk
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || ""
 
-        setMessages((prev) => {
-          const newMessages = [...prev]
-          newMessages[newMessages.length - 1] = {
-            ...assistantMessage,
-            content: assistantContent,
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue
+        const data = line.replace("data: ", "").trim()
+        if (data === "[DONE]") break
+
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.type === "text-delta" && parsed.delta) {
+            assistantMessageText += parsed.delta
+            setMessages((prev) => {
+              const newMessages = [...prev]
+              newMessages[newMessages.length - 1] = {
+                id: newMessages[newMessages.length - 1].id,
+                role: "assistant",
+                content: assistantMessageText,
+                created_at: new Date().toISOString(),
+              }
+              return newMessages
+            })
           }
-          return newMessages
-        })
+        } catch {}
       }
+    }
 
-      if (currentConversationId) {
+      // Save assistant message to database after streaming completes
+      if (currentConversationId && assistantMessageText) {
         await fetch(`/api/conversations/${currentConversationId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             role: "assistant",
-            content: assistantContent,
+            content: assistantMessageText,
           }),
         })
       }
+
+      // Update conversation title with first message
+      if (isFirstMessage && currentConversationId) {
+        const title = message.length > 50 ? message.substring(0, 50) + "..." : message
+        await fetch(`/api/conversations/${currentConversationId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        })
+        // Trigger sidebar refresh
+        setSidebarRefresh((prev) => prev + 1)
+      }
+
     } catch (error: any) {
       console.error("[v0] Error sending message:", error)
       setMessages((prev) => [
@@ -171,6 +207,7 @@ export default function ChatPage() {
           id: Date.now().toString(),
           role: "assistant",
           content: `Lo siento, hubo un error: ${error.message}. Por favor verifica que las tablas de la base de datos estén creadas correctamente.`,
+          created_at: new Date().toISOString(),
         },
       ])
     } finally {
@@ -188,6 +225,7 @@ export default function ChatPage() {
         currentConversationId={currentConversationId || undefined}
         onSelectConversation={loadConversation}
         onNewConversation={createNewConversation}
+        refreshTrigger={sidebarRefresh}
       />
 
       <div className="flex-1 flex flex-col">
